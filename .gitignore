@@ -1,2 +1,5 @@
 no-augmented/
 yes-augmented/
+model/training_simple.py
+**.keras
+*.keras
