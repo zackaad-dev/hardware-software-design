@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-
-TARGET_TOTAL=$1
-
-[ -d "../data/yes-augmented" ] && rm -rf "../data/yes-augmented"
-uv run augmentation.py -i ../data/yes -t "$TARGET_TOTAL" --width 240 --height 240
-
-[ -d "../data/no-augmented" ] && rm -rf "../data/no-augmented"
-uv run augmentation.py -i ../data/no -t "$TARGET_TOTAL"
