@@ -3,3 +3,7 @@ yes-augmented/
 model/training_simple.py
 **.keras
 *.keras
+*.png
+tuning_results/
+gen/
+__pycache__/
