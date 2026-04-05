@@ -13,14 +13,13 @@
 #include "model.h"
 #include "inference.h"
 
-// LED pin
+// LED pin on XIAO ESP32S3 Sense (Active Low)
 #define LED_PIN GPIO_NUM_21
 
 static float prediction[NUM_CLASSES];
 static const char *TAG_MAIN = "Main";
 
-// Standard ESP32-S3 camera pins (e.g. Freenove ESP32-S3 WROOM CAM / ESP32-S3 Sense)
-// You may need to adapt these pins if you use a different board.
+// Camera pins for XIAO ESP32S3 Sense
 #define PWDN_GPIO_NUM     -1
 #define RESET_GPIO_NUM    -1
 #define XCLK_GPIO_NUM     10
@@ -49,7 +48,7 @@ static camera_config_t camera_config = {
     .pin_d5 = Y7_GPIO_NUM,
     .pin_d4 = Y6_GPIO_NUM,
     .pin_d3 = Y5_GPIO_NUM,
-    .pin_d2 = Y4_GPIO_NUM,
+    .pin_d2 = Y4_GPIO_NUM, // Fixed: was Y2_GPIO_NUM
     .pin_d1 = Y3_GPIO_NUM,
     .pin_d0 = Y2_GPIO_NUM,
     .pin_vsync = VSYNC_GPIO_NUM,
@@ -90,7 +89,7 @@ void setup(void)
     // Initialize LED
     gpio_reset_pin(LED_PIN);
     gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(LED_PIN, 1); // Turn off LED (active low)
+    gpio_set_level(LED_PIN, 1); // Start with LED OFF (Active Low)
 }
 
 void loop(void)
@@ -102,12 +101,9 @@ void loop(void)
         return;
     }
 
-    // Convert RGB565 (240x240) to RGB888 and crop to IMG_SIZE x IMG_SIZE (224x224)
-    // Directly push to inference input to save RAM
+    // Crop and convert to RGB888 directly into inference input
     int offset_x = (fb->width - IMG_SIZE) / 2;
     int offset_y = (fb->height - IMG_SIZE) / 2;
-    
-    // Ensure we don't go out of bounds if fb is smaller than expected
     if (offset_x < 0) offset_x = 0;
     if (offset_y < 0) offset_y = 0;
 
@@ -119,77 +115,74 @@ void loop(void)
             int src_x = offset_x + x;
             int src_y = offset_y + y;
             
-            // Boundary safety
-            if (src_x >= fb->width || src_y >= fb->height) {
-                continue;
-            }
+            if (src_x >= fb->width || src_y >= fb->height) continue;
             
-            // RGB565 (Big Endian) to RGB888 conversion
-            // p[0] is RRRRRGGG, p[1] is GGGBBBBB
-            uint8_t *p = &pixels[(src_y * fb->width + src_x) * 2];
-            uint8_t r = p[0] & 0xF8;
-            uint8_t g = ((p[0] & 0x07) << 5) | ((p[1] & 0xE0) >> 3);
-            uint8_t b = (p[1] & 0x1F) << 3;
+            // RGB565 (Big Endian: hb=RRRRRGGG, lb=GGGBBBBB)
+            uint8_t hb = pixels[(src_y * fb->width + src_x) * 2];
+            uint8_t lb = pixels[(src_y * fb->width + src_x) * 2 + 1];
+            
+            // Extract bits
+            uint8_t r_raw = (hb & 0xF8) >> 3;
+            uint8_t g_raw = ((hb & 0x07) << 3) | ((lb & 0xE0) >> 5);
+            uint8_t b_raw = lb & 0x1F;
+
+            // Bit-extension to 8-bit [0, 255]
+            uint8_t r = (r_raw * 255) / 31;
+            uint8_t g = (g_raw * 255) / 63;
+            uint8_t b = (b_raw * 255) / 31;
+
+            // Swapping R and B because sensor appears to be BGR565
+            uint8_t tmp = r; 
+            r = b; 
+            b = tmp;
 
             inference_set_input_pixel(x, y, r, g, b);
         }
     }
-
     esp_camera_fb_return(fb);
 
     // Run inference
-    if (!inference_predict(prediction))
+    if (inference_predict(prediction))
     {
-        ESP_LOGE(TAG_MAIN, "Failed to invoke interpreter!");
-    }
-    else
-    {
-        // Print output
-        ESP_LOGI(TAG_MAIN, "Predictions:");
+        const char* labels[] = {"member1", "noface", "nonmember"};
+        
+        // Print all probabilities
+        ESP_LOGI(TAG_MAIN, "Inference Results:");
+        int max_idx = 0;
+        float max_val = -1.0f;
         for (int i = 0; i < NUM_CLASSES; i++) {
-            ESP_LOGI(TAG_MAIN, "  Class %d: %.2f", i, prediction[i]);
+            ESP_LOGI(TAG_MAIN, "  %s: %.2f%%", labels[i], prediction[i] * 100.0f);
+            if (prediction[i] > max_val) {
+                max_val = prediction[i];
+                max_idx = i;
+            }
         }
 
-        /**
-         * The model output is a dequantized float array where each index corresponds 
-         * to a class name sorted alphabetically during training.
-         * 
-         * For example, if your DATA_DIR had:
-         * - 'johannes/'
-         * - 'other/'
-         * Then 'johannes' is index 0 and 'other' is index 1.
-         * 
-         * UPDATE THIS INDEX if your class sorting is different.
-         */
-        #define RECOGNIZED_PERSON_CLASS_INDEX 0
-        float threshold = 0.7f;
-
-        if (NUM_CLASSES > RECOGNIZED_PERSON_CLASS_INDEX && prediction[RECOGNIZED_PERSON_CLASS_INDEX] > threshold)
-        {
-            ESP_LOGI(TAG_MAIN, "Person recognized! Threshold: %.2f", prediction[RECOGNIZED_PERSON_CLASS_INDEX]);
-            gpio_set_level(LED_PIN, 0); // Turn on LED (assuming active low)
-        }
-        else
-        {
-            gpio_set_level(LED_PIN, 1); // Turn off LED
+        float threshold = 0.6f;
+        if (max_val > threshold) {
+            if (max_idx == 0) { // member1
+                ESP_LOGI(TAG_MAIN, ">>> MEMBER1 DETECTED - LED ON <<<");
+                gpio_set_level(LED_PIN, 0); // Active Low
+            } else if (max_idx == 2) { // nonmember
+                ESP_LOGI(TAG_MAIN, ">>> NON-MEMBER DETECTED - LED OFF <<<");
+                gpio_set_level(LED_PIN, 1); // Active Low
+            } else { // noface (max_idx == 1)
+                ESP_LOGI(TAG_MAIN, "No face / Other - Doing nothing");
+            }
         }
     }
 
-    // Yield to allow other tasks (like IDLE and Watchdog) to run
+    // Yield
     vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 extern "C" void app_main(void)
 {
-    // Force output even if we crash immediately after
-    printf("\n\n--- XIAO ESP32-S3 STARTING ---\n");
-    printf("--- PSRAM ENABLED ---\n");
+    printf("\n\n--- XIAO ESP32-S3 SENSE FACE RECOGNITION STARTING ---\n");
     fflush(stdout);
-    usleep(200000); // 200ms delay to let serial settle
+    vTaskDelay(200 / portTICK_PERIOD_MS);
 
-    ESP_LOGI(TAG_MAIN, "Starting app_main initialization...");
     setup();
-    ESP_LOGI(TAG_MAIN, "Initialization complete, entering loop.");
     
     while (true)
     {

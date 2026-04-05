@@ -321,21 +321,6 @@ def export_model_to_tflite(
     with open(tflite_path, "wb") as f:
         f.write(tflite_model)
 
-    # # 3. Export to C/H files
-    # model_h_path = os.path.join(gen_dir, "model.h")
-    # model_c_path = os.path.join(gen_dir, "model.c")
-
-    # defines = {
-    #     "IMG_SIZE": config.IMG_SIZE,
-    #     "NUM_CLASSES": num_classes,
-    # }
-    # declarations = []  # You can add declarations like 'extern float my_var;' here if needed
-    #
-    # write_model_h_file(model_h_path, defines, declarations)
-    # write_model_c_file(model_c_path, tflite_model)
-
-    # print(f"TFLite model exported to {gen_dir}/model.h and {gen_dir}/model.c")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Train Face Recognition Model")

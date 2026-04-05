@@ -40,9 +40,8 @@ bool inference_init()
         }
     }
 
-
-    // Load TFlite model
-    model = tflite::GetModel(model_binary);
+    // Load TFlite model from the C array
+    model = tflite::GetModel(model_tflite);
     if (model->version() != TFLITE_SCHEMA_VERSION)
     {
         ESP_LOGE(TAG_INF, "Model schema mismatch!");
@@ -82,16 +81,17 @@ bool inference_init()
     input_zero_point = input->params.zero_point;
 
     // Print input and output tensor types and dimensions
-    ESP_LOGI(TAG_INF, "Input tensor type: %s, shape: %d, %d, %d, %d",
+    ESP_LOGI(TAG_INF, "Input: %s (%d, %d, %d, %d)",
              TfLiteTypeGetName(input->type), input->dims->data[0], input->dims->data[1], input->dims->data[2], input->dims->data[3]);
-    ESP_LOGI(TAG_INF, "Output tensor type: %s, shape: %d, %d, zero_point: %d, scale: %.6f",
+    ESP_LOGI(TAG_INF, "Output: %s (%d, %d), zp: %d, scale: %.6f",
              TfLiteTypeGetName(output->type), output->dims->data[0], output->dims->data[1], output->params.zero_point, output->params.scale);
 
     if (output->dims->data[1] != NUM_CLASSES)
     {
-        ESP_LOGW(TAG_INF, "Warning: Model output size (%d) does not match NUM_CLASSES (%d)!", 
+        ESP_LOGW(TAG_INF, "Model output size (%d) does not match NUM_CLASSES (%d)!", 
                  output->dims->data[1], NUM_CLASSES);
     }
+    
     return true;
 }
 
@@ -108,13 +108,27 @@ void inference_set_input_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b)
 
     for (int c = 0; c < 3; ++c)
     {
+        // Normalization: [0, 255] -> [-1.0, 1.0]
         float val_float = ((float)channels[c] / 127.5f) - 1.0f;
+        
+        // Quantization: float -> int8
+        // formula: real_value = (quant_value - zero_point) * scale
+        // so: quant_value = (real_value / scale) + zero_point
         int32_t val_quant = static_cast<int32_t>(roundf(val_float / input_scale) + input_zero_point);
         
+        // Clamp to int8 range
         if (val_quant > 127) val_quant = 127;
         if (val_quant < -128) val_quant = -128;
         
         input->data.int8[base_idx + c] = static_cast<int8_t>(val_quant);
+    }
+
+    // Debug: log first pixel of the first frame
+    static bool first_pixel_logged = false;
+    if (!first_pixel_logged && x == 0 && y == 0) {
+        ESP_LOGI(TAG_INF, "Sample Pixel [0,0]: RGB(%d,%d,%d) -> Float(%.2f) -> Quant(%d)", 
+                 r, g, b, ((float)r/127.5f)-1.0f, input->data.int8[base_idx]);
+        first_pixel_logged = true;
     }
 }
 
@@ -128,17 +142,15 @@ bool inference_predict(float *prediction)
     // Run inference
     if (interpreter->Invoke() != kTfLiteOk)
     {
+        ESP_LOGE(TAG_INF, "Failed to invoke interpreter!");
         return false;
     }
 
     // Dequantize the output from int8 to float
-    float sum = 0;
     for (size_t i = 0; i < NUM_CLASSES; ++i)
     {
         prediction[i] = (static_cast<float>(output->data.int8[i]) - output->params.zero_point) * output->params.scale;
-        sum += prediction[i];
     }
-    ESP_LOGD(TAG_INF, "Prediction sum: %.2f", sum);
 
     return true;
 }

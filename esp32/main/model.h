@@ -1,10 +1,9 @@
-#ifndef MODEL_H
-#define MODEL_H
+#pragma once
+
+#include <stdint.h>
+
+extern const unsigned char model_tflite[];
+extern const unsigned int model_tflite_len;
 
 #define IMG_SIZE 224
-#define NUM_CLASSES 2
-
-
-extern const unsigned char model_binary[];
-
-#endif
+#define NUM_CLASSES 3
