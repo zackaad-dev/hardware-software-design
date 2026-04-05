@@ -13,10 +13,18 @@ def write_model_h_file(path: str, defines: dict, declarations: list[str]):
         for key, value in defines.items():
             h_file.write(f"#define {key} {value}\n")
         h_file.write("\n")
+        h_file.write("#ifdef __cplusplus\n")
+        h_file.write('extern "C" {\n')
+        h_file.write("#endif\n")
+        h_file.write("\n")
         for declaration in declarations:
             h_file.write(f"{declaration}\n")
         h_file.write("\n")
         h_file.write("extern const unsigned char model_binary[];\n")
+        h_file.write("\n")
+        h_file.write("#ifdef __cplusplus\n")
+        h_file.write("}\n")
+        h_file.write("#endif\n")
         h_file.write("\n")
         h_file.write("#endif\n")
 

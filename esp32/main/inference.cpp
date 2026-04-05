@@ -50,7 +50,7 @@ bool inference_init()
     }
 
     // Create an interpreter using MicroMutableOpResolver
-    static tflite::MicroMutableOpResolver<20> resolver;
+    static tflite::MicroMutableOpResolver<12> resolver;
     resolver.AddConv2D();
     resolver.AddDepthwiseConv2D();
     resolver.AddRelu();

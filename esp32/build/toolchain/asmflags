@@ -1,6 +1,0 @@
--mlongcalls
--fno-builtin-memcpy
--fno-builtin-memset
--fno-builtin-bzero
--mdisable-hardware-atomics
-"-specs=/home/hannes/work/dtu/hardware-software-design/esp32/build/specs/picolibc.specs"

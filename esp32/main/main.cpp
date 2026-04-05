@@ -150,11 +150,23 @@ void loop(void)
             ESP_LOGI(TAG_MAIN, "  Class %d: %.2f", i, prediction[i]);
         }
 
-        // Assuming the class "johannes" was sorted first alphabetically, its index is 0.
-        // If it was sorted differently, update JOHANNES_CLASS_INDEX.
-        #define JOHANNES_CLASS_INDEX 0
-        if (NUM_CLASSES > JOHANNES_CLASS_INDEX && prediction[JOHANNES_CLASS_INDEX] > 0.7f)
+        /**
+         * The model output is a dequantized float array where each index corresponds 
+         * to a class name sorted alphabetically during training.
+         * 
+         * For example, if your DATA_DIR had:
+         * - 'johannes/'
+         * - 'other/'
+         * Then 'johannes' is index 0 and 'other' is index 1.
+         * 
+         * UPDATE THIS INDEX if your class sorting is different.
+         */
+        #define RECOGNIZED_PERSON_CLASS_INDEX 0
+        float threshold = 0.7f;
+
+        if (NUM_CLASSES > RECOGNIZED_PERSON_CLASS_INDEX && prediction[RECOGNIZED_PERSON_CLASS_INDEX] > threshold)
         {
+            ESP_LOGI(TAG_MAIN, "Person recognized! Threshold: %.2f", prediction[RECOGNIZED_PERSON_CLASS_INDEX]);
             gpio_set_level(LED_PIN, 0); // Turn on LED (assuming active low)
         }
         else
