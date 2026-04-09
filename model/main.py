@@ -15,7 +15,6 @@ from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from tensorflow.keras.callbacks import (
     EarlyStopping,
-    ModelCheckpoint,
     ReduceLROnPlateau,
 )
 from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D
@@ -28,7 +27,6 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 class Config:
     # Directories
     DATA_DIR: str = os.path.expanduser("~/personal/data")
-    MODEL_SAVE_PATH: str = "models/model.keras"
 
     # Image Settings
     IMG_SIZE: int = 224
@@ -38,9 +36,9 @@ class Config:
     EPOCHS: int = 64
     LEARNING_RATE: float = 0.001
     DROPOUT_RATE: float = 0.2
-    MOBILE_NET_ALPHA: float = 0.35
+    MOBILE_NET_ALPHA: float = 0.5
+    DENSE_UNITS: int = 128
 
-    # Early Stopping
     PATIENCE: int = 15
 
 
@@ -82,8 +80,7 @@ def load_and_preprocess_data(config: Config):
         raise FileNotFoundError(f"Data directory '{base_dir}' not found.")
 
     train_dir = os.path.join(base_dir, "training")
-    # Note: user folder is named 'validaton' (missing 'i')
-    val_dir = os.path.join(base_dir, "validaton")
+    val_dir = os.path.join(base_dir, "validation")
     test_dir = os.path.join(base_dir, "test")
 
     if not os.path.exists(train_dir):
@@ -232,37 +229,27 @@ def plot_metrics(model, test_x, test_y, idx_to_class):
     # plt.legend(loc="best")
     # plt.savefig("precision_recall_curve.png")
     # print("Precision-Recall curve saved to precision_recall_curve.png")
-    plt.show()
+    # plt.show()
 
 
 def train(config: Config):
     """Orchestrates the data loading, model building, and training process."""
-    # 1. Load Data
     (train_x, train_y), (val_x, val_y), (test_x, test_y), idx_to_class = (
         load_and_preprocess_data(config)
     )
     num_classes = len(idx_to_class)
 
-    # 2. Build Model
     model = build_model(config, num_classes)
     model.summary()
 
-    # 3. Augmentation
     datagen = get_augmentation_generator()
     datagen.fit(train_x)
 
-    # 4. Callbacks
     callbacks = [
         EarlyStopping(
             monitor="val_loss" if val_x.size > 0 else "loss",
             patience=config.PATIENCE,
             restore_best_weights=True,
-            verbose=1,
-        ),
-        ModelCheckpoint(
-            config.MODEL_SAVE_PATH,
-            monitor="val_loss" if val_x.size > 0 else "loss",
-            save_best_only=True,
             verbose=1,
         ),
         ReduceLROnPlateau(
@@ -274,7 +261,6 @@ def train(config: Config):
         ),
     ]
 
-    # 5. Fit
     print(f"\nStarting training for {num_classes} classes...")
     model.fit(
         datagen.flow(train_x, train_y, batch_size=config.BATCH_SIZE),
@@ -349,7 +335,6 @@ def main():
 
     # Save the class mapping for later use
     print(f"\nTraining complete. Class mapping: {idx_to_class}")
-    print(f"Model saved to {config.MODEL_SAVE_PATH}")
 
     # Plot metrics using the test set
     if test_x.size > 0:
