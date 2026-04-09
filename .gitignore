@@ -1,5 +1,4 @@
-no-augmented/
-yes-augmented/
+data/
 model/training_simple.py
 **.keras
 *.keras
@@ -11,4 +10,6 @@ build/
 model.h
 model_data.cc
 *.tflite
+GEMINI.md
+
 
