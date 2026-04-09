@@ -8,3 +8,5 @@ tuning_results/
 gen/
 __pycache__/
 build/
+model.h
+model_data.cc
