@@ -11,5 +11,8 @@ model.h
 model_data.cc
 *.tflite
 GEMINI.md
+managed_components
+sdkconfig
+dependencies.lock
 
 

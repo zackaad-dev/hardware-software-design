@@ -92,6 +92,8 @@ void setup(void)
     gpio_set_level(LED_PIN, 1); // Start with LED OFF (Active Low)
 }
 
+static int reset = 0;
+
 void loop(void)
 {
     camera_fb_t *fb = esp_camera_fb_get();
@@ -142,6 +144,8 @@ void loop(void)
     esp_camera_fb_return(fb);
 
     // Run inference
+
+    vTaskDelay(1);
     if (inference_predict(prediction))
     {
         const char* labels[] = {"member1", "noface", "nonmember"};
@@ -158,22 +162,21 @@ void loop(void)
             }
         }
 
-        float threshold = 0.6f;
+        float threshold = 0.75f;
         if (max_val > threshold) {
             if (max_idx == 0) { // member1
                 ESP_LOGI(TAG_MAIN, ">>> MEMBER1 DETECTED - LED ON <<<");
                 gpio_set_level(LED_PIN, 0); // Active Low
-            } else if (max_idx == 2) { // nonmember
-                ESP_LOGI(TAG_MAIN, ">>> NON-MEMBER DETECTED - LED OFF <<<");
-                gpio_set_level(LED_PIN, 1); // Active Low
-            } else { // noface (max_idx == 1)
-                ESP_LOGI(TAG_MAIN, "No face / Other - Doing nothing");
-            }
-        }
+				reset = 0;
+            } else { // nonmember
+                ESP_LOGI(TAG_MAIN, ">>> NO-MEMBER DETECTED - LED OFF <<<");
+				if (reset == 0) {
+					reset = 1;
+					gpio_set_level(LED_PIN, 1); // Active Low
+				}
+            } 
+		}
     }
-
-    // Yield
-    vTaskDelay(2 / portTICK_PERIOD_MS);
 }
 
 extern "C" void app_main(void)

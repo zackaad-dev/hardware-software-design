@@ -23,6 +23,7 @@ static const char *TAG_INF = "Inference";
 
 static float input_scale = 1.0f;
 static int input_zero_point = 0;
+static int8_t quantization_lut[256];
 
 /**
  * @brief Initialize the TFLite Micro interpreter with the model.
@@ -62,6 +63,8 @@ bool inference_init()
     resolver.AddFullyConnected();
     resolver.AddDequantize();
     resolver.AddQuantize();
+    resolver.AddPad(); 
+    resolver.AddMul();
 
     static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, TENSOR_ARENA_SIZE);
     interpreter = &static_interpreter;
@@ -80,6 +83,15 @@ bool inference_init()
     input_scale = input->params.scale;
     input_zero_point = input->params.zero_point;
 
+    // Initialize Quantization LUT
+    for (int i = 0; i < 256; i++) {
+        float val_float = ((float)i / 127.5f) - 1.0f;
+        int32_t val_quant = static_cast<int32_t>(roundf(val_float / input_scale) + input_zero_point);
+        if (val_quant > 127) val_quant = 127;
+        if (val_quant < -128) val_quant = -128;
+        quantization_lut[i] = static_cast<int8_t>(val_quant);
+    }
+
     // Print input and output tensor types and dimensions
     ESP_LOGI(TAG_INF, "Input: %s (%d, %d, %d, %d)",
              TfLiteTypeGetName(input->type), input->dims->data[0], input->dims->data[1], input->dims->data[2], input->dims->data[3]);
@@ -97,37 +109,22 @@ bool inference_init()
 
 /**
  * @brief Set an input pixel directly into the interpreter's input tensor.
- *        Performs quantization: (val / 127.5 - 1.0) / scale + zero_point
+ *        Uses a pre-calculated LUT for quantization.
  */
 void inference_set_input_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b)
 {
     if (x < 0 || x >= IMG_SIZE || y < 0 || y >= IMG_SIZE) return;
 
-    const uint8_t channels[3] = {r, g, b};
     int base_idx = (y * IMG_SIZE + x) * 3;
-
-    for (int c = 0; c < 3; ++c)
-    {
-        // Normalization: [0, 255] -> [-1.0, 1.0]
-        float val_float = ((float)channels[c] / 127.5f) - 1.0f;
-        
-        // Quantization: float -> int8
-        // formula: real_value = (quant_value - zero_point) * scale
-        // so: quant_value = (real_value / scale) + zero_point
-        int32_t val_quant = static_cast<int32_t>(roundf(val_float / input_scale) + input_zero_point);
-        
-        // Clamp to int8 range
-        if (val_quant > 127) val_quant = 127;
-        if (val_quant < -128) val_quant = -128;
-        
-        input->data.int8[base_idx + c] = static_cast<int8_t>(val_quant);
-    }
+    input->data.int8[base_idx]     = quantization_lut[r];
+    input->data.int8[base_idx + 1] = quantization_lut[g];
+    input->data.int8[base_idx + 2] = quantization_lut[b];
 
     // Debug: log first pixel of the first frame
     static bool first_pixel_logged = false;
     if (!first_pixel_logged && x == 0 && y == 0) {
-        ESP_LOGI(TAG_INF, "Sample Pixel [0,0]: RGB(%d,%d,%d) -> Float(%.2f) -> Quant(%d)", 
-                 r, g, b, ((float)r/127.5f)-1.0f, input->data.int8[base_idx]);
+        ESP_LOGI(TAG_INF, "Sample Pixel [0,0]: RGB(%d,%d,%d) -> Quant(%d,%d,%d)", 
+                 r, g, b, quantization_lut[r], quantization_lut[g], quantization_lut[b]);
         first_pixel_logged = true;
     }
 }
