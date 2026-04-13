@@ -41,7 +41,7 @@ bool inference_init()
     }
 
     // Load TFlite model from the C array
-    model = tflite::GetModel(model_tflite);
+    model = tflite::GetModel(MODEL_TFLITE);
     if (model->version() != TFLITE_SCHEMA_VERSION)
     {
         ESP_LOGE(TAG_INF, "Model schema mismatch!");

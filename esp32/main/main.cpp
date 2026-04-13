@@ -173,7 +173,7 @@ void loop(void)
     }
 
     // Yield
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(2 / portTICK_PERIOD_MS);
 }
 
 extern "C" void app_main(void)
