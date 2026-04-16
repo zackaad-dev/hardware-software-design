@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -xe
+
+pushd esp32
+idf.py fullclean
+idf.py build flash monitor
+popd
+echo "Model flashed"

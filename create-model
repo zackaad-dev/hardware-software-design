@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+set -xe
+
+echo "Generating model"
+
+# Push model directory
+pushd model
+uv run main.py
+pushd gen 
+
+xxd -i -C model.tflite > model_data.cc
+sed -i "s/unsigned/extern const unsigned/g" model_data.cc
+mv model_data.cc ../../esp32/main/model_data.cc
+
+popd
+popd
+clear	
+echo "Model generated"
