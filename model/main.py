@@ -9,7 +9,9 @@ import seaborn as sns
 import tensorflow as tf
 from PIL import Image
 from sklearn.metrics import (
+    average_precision_score,
     confusion_matrix,
+    precision_recall_curve,
 )
 from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
@@ -25,17 +27,23 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 @dataclass
 class Config:
-    DATA_DIR: str = os.path.expanduser("~/personal/data")
+    DATA_DIR: str = os.path.expanduser("~/personal/datav2/")
     IMG_SIZE: int = 224
     PATIENCE: int = 15
 
     # Hyperparameters
-    BATCH_SIZE: int = 8
+    BATCH_SIZE: int = 32
     EPOCHS: int = 64
-    LEARNING_RATE: float = 0.01
-    DROPOUT_RATE: float = 0.8
+    LEARNING_RATE: float = 0.0053777
+    DROPOUT_RATE: float = 0.2
     MOBILE_NET_ALPHA: float = 0.5
-    DENSE_UNITS: int = 32
+    DENSE_UNITS: int = 96
+
+    # Best Value So Far |Hyperparameter
+    # 0.0053777         |learning_rate
+    # 0.2               |dropout_rate
+    # 96                |dense_units
+    # 32                |batch_size
 
 
 def load_image_as_array(filepath, img_size):
@@ -197,23 +205,23 @@ def plot_metrics(model, test_x, test_y, idx_to_class):
     plt.savefig("images/confusion_matrix.png")
     print("Confusion matrix saved to confusion_matrix.png")
 
-    # plt.figure(figsize=(10, 8))
-    #
-    # for i in range(len(classes)):
-    #     y_true_binary = (test_y == i).astype(int)
-    #     y_scores = y_pred_probs[:, i]
-    #
-    #     precision, recall, _ = precision_recall_curve(y_true_binary, y_scores)
-    #     avg_precision = average_precision_score(y_true_binary, y_scores)
-    #
-    #     plt.plot(recall, precision, label=f"{classes[i]} (AP={avg_precision:.2f})")
-    #
-    # plt.xlabel("Recall")
-    # plt.ylabel("Precision")
-    # plt.title("Precision-Recall Curve")
-    # plt.legend(loc="best")
-    # plt.savefig("precision_recall_curve.png")
-    # print("Precision-Recall curve saved to precision_recall_curve.png")
+    plt.figure(figsize=(10, 8))
+
+    for i in range(len(classes)):
+        y_true_binary = (test_y == i).astype(int)
+        y_scores = y_pred_probs[:, i]
+
+        precision, recall, _ = precision_recall_curve(y_true_binary, y_scores)
+        avg_precision = average_precision_score(y_true_binary, y_scores)
+
+        plt.plot(recall, precision, label=f"{classes[i]} (AP={avg_precision:.2f})")
+
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title("Precision-Recall Curve")
+    plt.legend(loc="best")
+    plt.savefig("images/precision_recall_curve.png")
+    print("Precision-Recall curve saved to precision_recall_curve.png")
     # plt.show()
 
 
@@ -249,7 +257,6 @@ def train(config: Config):
     print(f"\nStarting training for {num_classes} classes...")
     model.fit(
         datagen.flow(train_x, train_y, batch_size=config.BATCH_SIZE),
-        steps_per_epoch=max(1, len(train_x) // config.BATCH_SIZE),
         epochs=config.EPOCHS,
         validation_data=(val_x, val_y) if val_x.size > 0 else None,
         callbacks=callbacks,
@@ -293,7 +300,7 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=str,
-        default=os.path.expanduser("~/personal/data"),
+        default=os.path.expanduser("~/personal/datav2/"),
         help="Path to data directory",
     )
     parser.add_argument(
@@ -311,6 +318,7 @@ def main():
     model, idx_to_class, (train_x, train_y), (val_x, val_y), (test_x, test_y) = train(
         config
     )
+    model.save("models/model.keras")
     num_classes = len(idx_to_class)
 
     print(f"\nTraining complete. Class mapping: {idx_to_class}")

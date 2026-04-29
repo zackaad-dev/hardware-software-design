@@ -50,7 +50,7 @@ bool inference_init()
     }
 
     // Create an interpreter using MicroMutableOpResolver
-    static tflite::MicroMutableOpResolver<12> resolver;
+    static tflite::MicroMutableOpResolver<15> resolver;
     resolver.AddConv2D();
     resolver.AddDepthwiseConv2D();
     resolver.AddRelu();
@@ -83,8 +83,14 @@ bool inference_init()
     input_scale = input->params.scale;
     input_zero_point = input->params.zero_point;
 
+    if (input_scale == 0) {
+        ESP_LOGW(TAG_INF, "Input scale is 0, defaulting to 1/255.0");
+        input_scale = 1.0f / 255.0f;
+    }
+
     // Initialize Quantization LUT
     for (int i = 0; i < 256; i++) {
+        // Map [0, 255] to [-1.0, 1.0] (tf mode)
         float val_float = ((float)i / 127.5f) - 1.0f;
         int32_t val_quant = static_cast<int32_t>(roundf(val_float / input_scale) + input_zero_point);
         if (val_quant > 127) val_quant = 127;
@@ -93,10 +99,13 @@ bool inference_init()
     }
 
     // Print input and output tensor types and dimensions
-    ESP_LOGI(TAG_INF, "Input: %s (%d, %d, %d, %d)",
-             TfLiteTypeGetName(input->type), input->dims->data[0], input->dims->data[1], input->dims->data[2], input->dims->data[3]);
-    ESP_LOGI(TAG_INF, "Output: %s (%d, %d), zp: %d, scale: %.6f",
-             TfLiteTypeGetName(output->type), output->dims->data[0], output->dims->data[1], output->params.zero_point, output->params.scale);
+    ESP_LOGI(TAG_INF, "Model loaded successfully");
+    ESP_LOGI(TAG_INF, "Input: %s, shape: (%d, %d, %d, %d), scale: %.6f, zp: %d",
+             TfLiteTypeGetName(input->type), input->dims->data[0], input->dims->data[1], input->dims->data[2], input->dims->data[3],
+             input->params.scale, input->params.zero_point);
+    ESP_LOGI(TAG_INF, "Output: %s, shape: (%d, %d), scale: %.6f, zp: %d",
+             TfLiteTypeGetName(output->type), output->dims->data[0], output->dims->data[1], 
+             output->params.scale, output->params.zero_point);
 
     if (output->dims->data[1] != NUM_CLASSES)
     {
@@ -119,14 +128,6 @@ void inference_set_input_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b)
     input->data.int8[base_idx]     = quantization_lut[r];
     input->data.int8[base_idx + 1] = quantization_lut[g];
     input->data.int8[base_idx + 2] = quantization_lut[b];
-
-    // Debug: log first pixel of the first frame
-    static bool first_pixel_logged = false;
-    if (!first_pixel_logged && x == 0 && y == 0) {
-        ESP_LOGI(TAG_INF, "Sample Pixel [0,0]: RGB(%d,%d,%d) -> Quant(%d,%d,%d)", 
-                 r, g, b, quantization_lut[r], quantization_lut[g], quantization_lut[b]);
-        first_pixel_logged = true;
-    }
 }
 
 /**

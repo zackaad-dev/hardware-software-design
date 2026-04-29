@@ -133,11 +133,6 @@ void loop(void)
             uint8_t g = (g_raw * 255) / 63;
             uint8_t b = (b_raw * 255) / 31;
 
-            // Swapping R and B because sensor appears to be BGR565
-            uint8_t tmp = r; 
-            r = b; 
-            b = tmp;
-
             inference_set_input_pixel(x, y, r, g, b);
         }
     }
@@ -148,34 +143,43 @@ void loop(void)
     vTaskDelay(1);
     if (inference_predict(prediction))
     {
-        const char* labels[] = {"member1", "noface", "nonmember"};
+        const char* labels[] = {"member 1", "member 2", "nonmember"};
         
-        // Print all probabilities
-        ESP_LOGI(TAG_MAIN, "Inference Results:");
+        // Find best prediction
         int max_idx = 0;
         float max_val = -1.0f;
         for (int i = 0; i < NUM_CLASSES; i++) {
-            ESP_LOGI(TAG_MAIN, "  %s: %.2f%%", labels[i], prediction[i] * 100.0f);
             if (prediction[i] > max_val) {
                 max_val = prediction[i];
                 max_idx = i;
             }
         }
 
+        // Detailed log to understand distribution
+        printf("Inf: %s (%.1f%%) | m1:%.2f m2:%.2f nm:%.2f\n", 
+               labels[max_idx], max_val * 100.0f, prediction[0], prediction[1], prediction[2]);
+
         float threshold = 0.75f;
         if (max_val > threshold) {
-            if (max_idx == 0) { // member1
-                ESP_LOGI(TAG_MAIN, ">>> MEMBER1 DETECTED - LED ON <<<");
+            if (max_idx == 0 || max_idx == 1) { // member 1 or member 2
+                ESP_LOGI(TAG_MAIN, ">>> ACCESS GRANTED: %s <<<", labels[max_idx]);
                 gpio_set_level(LED_PIN, 0); // Active Low
 				reset = 0;
             } else { // nonmember
-                ESP_LOGI(TAG_MAIN, ">>> NO-MEMBER DETECTED - LED OFF <<<");
+                ESP_LOGI(TAG_MAIN, ">>> ACCESS DENIED: %s <<<", labels[max_idx]);
 				if (reset == 0) {
 					reset = 1;
 					gpio_set_level(LED_PIN, 1); // Active Low
 				}
             } 
-		}
+		} else {
+            // Low confidence detection
+            if (reset == 0) {
+                ESP_LOGI(TAG_MAIN, ">>> NO CONFIDENT DETECTION - LED OFF <<<");
+                gpio_set_level(LED_PIN, 1); // Active Low
+                reset = 1;
+            }
+        }
     }
 }
 

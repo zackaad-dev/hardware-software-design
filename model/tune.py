@@ -7,6 +7,7 @@ from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from main import (
     Config,
     build_model,
+    export_model_to_tflite,
     get_augmentation_generator,
     load_and_preprocess_data,
 )
@@ -47,7 +48,6 @@ class HModel(kt.HyperModel):
 
         return model.fit(
             self.datagen.flow(self.train_x, self.train_y, batch_size=batch_size),
-            steps_per_epoch=max(1, len(self.train_x) // batch_size),
             validation_data=(self.val_x, self.val_y) if self.val_x.size > 0 else None,
             **kwargs,
         )
@@ -90,7 +90,7 @@ def main():
 
     print("\nStarting Hyperparameter Search...")
     tuner.search(
-        epochs=40,
+        epochs=50,
         callbacks=[
             EarlyStopping(
                 monitor="val_loss" if val_x.size > 0 else "loss",
@@ -114,6 +114,15 @@ def main():
     print(f" - Dropout Rate: {best_hps.get('dropout_rate')}")
     print(f" - Dense Units: {best_hps.get('dense_units')}")
     print(f" - Batch Size: {best_hps.get('batch_size')}")
+    print("Saving Best Model...")
+    config.LEARNING_RATE = best_hps.get("learning_rate")
+    config.DROPOUT_RATE = best_hps.get("dropout_rate")
+    config.DENSE_UNITS = best_hps.get("dense_units")
+    config.BATCH_SIZE = best_hps.get("batch_size")
+    model = build_model(config, num_classes)
+    model.save("models/model_tuned.keras")
+    print("Exporting to TFLite")
+    export_model_to_tflite(model, config, num_classes, train_x=train_x)
 
 
 if __name__ == "__main__":

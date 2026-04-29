@@ -6,7 +6,7 @@ echo "Generating model"
 
 # Push model directory
 pushd model
-uv run main.py
+uv run main.py 
 pushd gen 
 
 xxd -i -C model.tflite > model_data.cc
